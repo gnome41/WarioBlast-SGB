@@ -23,6 +23,7 @@ static RamWrite ram_writes[CHEATS_MAX * 4];
 static size_t n_ram;
 static RomPatch rom_patches[CHEATS_MAX * 4 * 32];
 static size_t n_rom;
+static size_t n_fixed;   /* the first n_fixed patches (start stage) ignore F8 */
 static uint8_t patch_bank[sizeof rom_patches / sizeof *rom_patches];
 static uint16_t patch_addr[sizeof rom_patches / sizeof *rom_patches];
 static bool enabled = true;
@@ -120,10 +121,10 @@ bool cheats_parse_check(const char *codes, char *err, size_t err_size)
 static void rom_apply(bool on)
 {
     if (on) {
-        for (size_t i = 0; i < n_rom; i++)
+        for (size_t i = n_fixed; i < n_rom; i++)
             gb.rom[rom_patches[i].offset] = rom_patches[i].value;
     } else {
-        for (size_t i = n_rom; i-- > 0;)
+        for (size_t i = n_rom; i-- > n_fixed;)
             gb.rom[rom_patches[i].offset] = rom_patches[i].original;
     }
     dispatch_dirty = true;
@@ -167,15 +168,83 @@ bool cheats_add(const char *codes)
     return ok;
 }
 
-bool cheats_active(void) { return enabled && (n_ram || n_rom); }
+bool cheats_active(void) { return enabled && (n_ram || n_rom > n_fixed); }
 
 void cheats_toggle(void)
 {
-    if (!n_ram && !n_rom)
+    if (!n_ram && n_rom == n_fixed)
         return;
     enabled = !enabled;
     rom_apply(enabled);
     fprintf(stderr, "cheats %s\n", enabled ? "on" : "off");
+}
+
+/* ---- start stage ---- */
+
+/* Normal mode is 32 rounds, 8 worlds of 3 enemies and a boss; the round
+ * index is C3F0 (0-31).  A new game passes through the title's
+ * initialisation at 0A:4013, which clears it:
+ *     xor a / ld [$C3F0],a / ld [$C3F1],a
+ * ($C3F1 was already cleared just before).  The start stage rewrites those
+ * seven bytes as
+ *     ld a,ROUND / ld [$C3F0],a / xor a / nop
+ * Passwords set C3F0 afterwards, so continuing is unchanged. */
+#define WORLDS 8
+#define STAGES_PER_WORLD 4
+#define START_BANK 0x0A
+#define START_ADDR 0x4013
+
+int stage_count(void) { return WORLDS * STAGES_PER_WORLD; }
+
+void stage_label(int i, char *buf, size_t size)
+{
+    int w = i / STAGES_PER_WORLD + 1, s = i % STAGES_PER_WORLD + 1;
+    if (s == STAGES_PER_WORLD)
+        snprintf(buf, size, "%d-%d BOSS", w, s);
+    else
+        snprintf(buf, size, "%d-%d ENEMY %d", w, s, s);
+}
+
+int stage_find(const char *ws)
+{
+    int w, s;
+    if (sscanf(ws, "%d-%d", &w, &s) != 2 || w < 1 || w > WORLDS || s < 1 || s > STAGES_PER_WORLD)
+        return -1;
+    return (w - 1) * STAGES_PER_WORLD + s - 1;
+}
+
+int stage_next_world(int stage, int dir)
+{
+    int w = stage / STAGES_PER_WORLD;
+    if (dir < 0 && stage % STAGES_PER_WORLD == 0)
+        w--;                  /* from a world's first stage back to the previous world */
+    else if (dir > 0)
+        w++;
+    if (w < 0)
+        return 0;
+    if (w >= WORLDS)
+        return stage_count() - 1;
+    return w * STAGES_PER_WORLD;
+}
+
+bool cheats_start_at(int stage)
+{
+    static const uint8_t orig[] = { 0xAF, 0xEA, 0xF0, 0xC3, 0xEA, 0xF1, 0xC3 };
+    uint8_t patch[] = { 0x3E, (uint8_t)stage, 0xEA, 0xF0, 0xC3, 0xAF, 0x00 };
+    uint32_t off = START_BANK * 0x4000u + (START_ADDR - 0x4000u);
+    if (stage <= 0 || stage >= stage_count() || n_rom != n_fixed || off + sizeof orig > gb.rom_size ||
+        memcmp(gb.rom + off, orig, sizeof orig))
+        return false;
+    for (size_t i = 0; i < sizeof patch; i++) {
+        rom_patches[n_rom] = (RomPatch){ off + (uint32_t)i, patch[i], gb.rom[off + i] };
+        patch_bank[n_rom] = START_BANK;
+        patch_addr[n_rom] = (uint16_t)(START_ADDR + i);
+        gb.rom[off + i] = patch[i];
+        n_rom++;
+    }
+    n_fixed = n_rom;
+    dispatch_dirty = true;
+    return true;
 }
 
 void cheats_frame(void)
@@ -190,14 +259,18 @@ size_t cheats_rom_patches(const uint8_t **bank, const uint16_t **addr)
 {
     *bank = patch_bank;
     *addr = patch_addr;
-    return enabled ? n_rom : 0;
+    return enabled ? n_rom : n_fixed;
 }
 
 /* ---- cheats file ---- */
 
-/* No built-in codes for this game yet; the list starts empty. */
+/* A lost bout is recorded at 01:48DC (ld a,$01 / ld [$C590],a; 2 = won,
+ * 0 = draw); with 0 instead the bout counts as a draw and is replayed,
+ * so a match is never lost.  The stage timer (BCD at C585-C587) has $01
+ * subtracted every 120 frames by 1FD6; the operand is at 1FEC. */
 static const Cheat builtin[] = {
-    { false, "", "" },
+    { false, "NEVER LOSE A BOUT", "008-DDB-EAE" },
+    { false, "FREEZE STAGE TIMER", "00F-ECE-EAE" },
 };
 
 int cheats_builtin(Cheat *out, int max)

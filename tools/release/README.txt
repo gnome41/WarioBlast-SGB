@@ -1,5 +1,5 @@
 WarioBlast Recomp @VERSION@
-===========================
+=======================
 
 An unofficial static recompilation of Wario Blast Featuring Bomberman!
 (Game Boy, 1994), with Super Game Boy colours, border and sound, 4-player
@@ -61,7 +61,11 @@ mods/WarioBlast-Example is an example pack (HD border, HD status-bar digits,
 a new first-stage tune) - enable it to try mods, or copy it to start your own.
 
 Cheats: GameShark (01VVLLHH) and Game Genie (ABC-DEF-GHI) codes, under
-CHEATS > MANAGE... in the launcher. F8 toggles cheats in game.
+CHEATS > MANAGE... in the launcher. "Never lose a bout" and a timer
+freeze are built in. F8 toggles cheats in game.
+
+Stage select: START STAGE in the launcher starts new Normal games at any
+round, 1-1 to 8-4 (Page Up / Down: a world at a time). Passwords still work.
 
 Command line: warioblast --help (any option skips the launcher).
 

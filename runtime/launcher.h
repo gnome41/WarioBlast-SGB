@@ -9,6 +9,7 @@
 bool launcher_run(char *rom, size_t rom_size, char *bios, size_t bios_size);
 
 /* mod packs chosen in the launcher (priority order) and the dump toggle */
+extern int launcher_stage;              /* start stage for new games, 0 = normal */
 extern char launcher_mods[16][128];
 extern int launcher_mod_count;
 extern bool launcher_dump;
