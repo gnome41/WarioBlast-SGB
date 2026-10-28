@@ -1,0 +1,10 @@
+build/
+build-*/
+/third_party/
+*.gb
+*.sav
+*:Zone.Identifier
+__pycache__/
+*.sfc
+dist/
+/mods/

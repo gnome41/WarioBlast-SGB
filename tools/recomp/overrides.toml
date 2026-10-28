@@ -1,0 +1,46 @@
+# Hints for the static analysis of
+# Wario Blast Featuring Bomberman! (USA, Europe) (SGB Enhanced).
+# Addresses are "AAAA" (fixed bank) or "BB:AAAA" (switchable bank, hex).
+
+# CRC32 of the ROM these notes describe; other ROMs are rejected.
+rom_crc32 = 0x927B57A1
+
+# Jump-table dispatchers, reached by rst 10h or call $0760: A = index,
+# followed by an inline table of 16-bit targets
+# (0010: jp $0760 -> add a,a / pop hl / add hl,de / ld hl,(hl) / jp hl).
+# Never return.
+jump_table_routines = [0x0010, 0x0760]
+
+# Routines that switch the ROM bank to the value in A
+# (0AA3: ld [$C196],a / ld [$3FFF],a / ret).
+bank_switch_routines = [0x0AA3]
+
+# Tables of 3-byte (bank, little-endian address) far pointers.
+far_tables = []
+
+# Routines taking a code address in a register pair:
+#  0A90  far call: HL = address, B = bank (restores the bank afterwards)
+#  0008  rst 08h: BC = where the main loop continues after the current
+#        frame wait (0708/0716 -> jp hl at 075F)
+far_calls = [
+    { addr = "0A90", addr_reg = "hl", bank_reg = "b" },
+    { addr = "0008", addr_reg = "bc" },
+]
+
+# Routines that never return to their caller.
+noreturn = []
+
+# Extra entry points the tracer cannot find on its own.
+entries = []
+
+# Sound driver interface (bank 7: 4006 = play song A, 4009 = play effect A,
+# 4015 = toggle pause), used by audio-replacement mods.  These are RAM
+# addresses, not ROM data.
+[audio]
+music_request = 0xD900      # song 01-12; 00 stops the music
+sfx_request = 0xD901        # sound effect 01-18
+sfx_channel_mask = 0xD90C   # bit n set while an effect uses channel n+1
+pause_flag = 0xD95E         # 1 while the game is paused
+pause_mask = 0x01
+music_stop = 0x00
+ack_mask = 0x80             # the driver sets bit 7 once it has taken a request
