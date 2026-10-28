@@ -3,6 +3,7 @@
 #include <string.h>
 #include "gb.h"
 #include "hires.h"
+#include "recomp/recomp.h"
 
 uint8_t ppu_shades[144][160];
 uint8_t ppu_wide[144][WIDE_W];
@@ -11,12 +12,14 @@ uint32_t screen_gen = 1;
 bool wide_has_content;
 
 /* In the wide view, a tilemap entry outside the original 160 px is only
- * shown if it was written for the current screen. */
+ * shown if it was written for the current screen - except in a game's
+ * arena (game_wide), whose whole extent is known to be in the tilemap. */
 static int no_mask = -1;   /* WB_WIDE_NOMASK: debugging aid */
+static bool in_arena;      /* this line: a match is on screen */
 
 static inline bool map_valid(unsigned map_addr, int x)
 {
-    return (x >= 0 && x < 160) || no_mask || map_gen[map_addr - 0x9800] == screen_gen;
+    return (x >= 0 && x < 160) || no_mask || in_arena || map_gen[map_addr - 0x9800] == screen_gen;
 }
 
 #define LCDC (gb.io[IO_LCDC])
@@ -79,10 +82,18 @@ static void render_span(int ly, int x0, int w, int wy, bool window_on, uint8_t *
             unsigned ma = map + (y / 8) * 32 + sx / 8;
             if (!map_valid(ma, x0 + i))
                 continue;
-            /* outside the original view, never wrap around the 256-px map:
-             * that would show the far end of the level */
-            if ((raw < 0 || raw > 255) && (x0 + i < 0 || x0 + i >= 160) && !no_mask)
-                continue;
+            if (x0 + i < 0 || x0 + i >= 160) {
+                /* outside the original view: inside the arena it wraps
+                 * through the map; otherwise never wrap around the 256-px
+                 * map, which would show the far end of the level */
+                if (in_arena) {
+                    int ay = ly + gb.io[IO_SCY];
+                    if (raw < 0 || raw >= game_wide.arena_w || ay >= game_wide.arena_h)
+                        continue;
+                } else if ((raw < 0 || raw > 255) && !no_mask) {
+                    continue;
+                }
+            }
             unsigned ta = bg_tile_addr(gb.vram[ma - 0x8000]);
             bgidx[i] = tile_pixel(ta, sx & 7, y & 7);
             if (bgidx[i] && (x0 + i < 0 || x0 + i >= 160))
@@ -99,8 +110,15 @@ static void render_span(int ly, int x0, int w, int wy, bool window_on, uint8_t *
         if (window_on) {
             int wx = gb.io[IO_WX] - 7;
             unsigned wmap = (LCDC & 0x40) ? 0x9C00 : 0x9800;
-            for (int x = wx < x0 ? x0 : wx; x < x0 + w; x++) {
+            /* in an arena the window is the status bar across the screen:
+             * outside the original view, continue its edge tiles */
+            int from = in_arena && wx <= 0 ? x0 : wx < x0 ? x0 : wx;
+            for (int x = from; x < x0 + w; x++) {
                 int px = x - wx;
+                if (in_arena && (x < 0 || x >= 160)) {
+                    int edge = x < 0 ? 0 : 159 - wx;
+                    px = edge - (edge & 7) + (px & 7);
+                }
                 unsigned ma = wmap + (wy / 8) * 32 + (px / 8 & 31);
                 if (!map_valid(ma, x)) {
                     bgidx[x - x0] = 0;
@@ -150,6 +168,10 @@ static void render_span(int ly, int x0, int w, int wy, bool window_on, uint8_t *
     for (int k = 0; k < n; k++) {
         const uint8_t *s = &gb.oam[sel[k] * 4];
         int sy = s[0] - 16, sx = s[1] - 8;
+        /* in an arena, a position past its right edge is a sprite left of
+         * the original view whose 8-bit X wrapped around */
+        if (in_arena && x0 < 0 && sx >= 160 && gb.io[IO_SCX] + sx >= game_wide.arena_w)
+            sx -= 256;
         uint8_t tile = s[2], attr = s[3];
         int row = ly - sy;
         if (attr & 0x40)
@@ -199,6 +221,8 @@ static void render_line(int ly)
                      wx < 160 && gb.io[IO_WX] <= 166;
     int wy = gb.window_line;
     bool cap = hires_capture_active();
+    in_arena = game_wide.arena_w && (LCDC & 0x20) && gb.io[IO_WY] == game_wide.active_wy &&
+               gb.io[IO_WX] == game_wide.active_wx;
     render_span(ly, 0, 160, wy, window_on, ppu_shades[ly], cap ? hires_refs[ly] : NULL);
     if (opt.view == VIEW_WIDE)
         render_span(ly, -WIDE_EXTRA, WIDE_W, wy, window_on, ppu_wide[ly], cap ? hires_refs_wide[ly] : NULL);

@@ -205,10 +205,19 @@ Choose a view in the launcher, with `--view`, or cycle with **F10** / **LB**:
 | `frame` | 16:9 canvas (400×224 SGB, 256×144 DMG): the native image centred, with the sides filled by a blurred, darkened extension of it |
 | `wide` **(experimental)** | true widescreen 256×144: the playfield rendered 48 px further on each side, using the game's own tilemap and sprites |
 
-**`wide` is experimental.** It shows only tilemap data that the game drew
-for the current screen, to keep stale or bogus graphics out. Where there is
-nothing more to see, the sides fall back to the `frame`-style blur. Wario
-Blast's arenas are about one screen wide, so most screens look like `frame`.
+**`wide` is experimental.** During a match (Normal or Battle) it shows the
+whole arena across the full width. The arena is up to 17 × 17 cells of
+16 px (272 px), and the game keeps all of it in the 256-px tilemap: the
+right and bottom walls wrap onto the left and top ones. So the wide view
+draws arena pixels 0–271 through the tilemap and leaves everything beyond
+the walls empty. The status bar continues across the width. A sprite left
+of the original view whose 8-bit X coordinate wrapped is put back on the
+left. These notes are in the `[wide]` section of `overrides.toml`; a match
+is recognised by the status bar's window position (WY 136, WX 7).
+
+On other screens (menus, intros, scoreboards) it shows only tilemap data
+the game drew for the current screen, and falls back to the `frame`-style
+blur where there is nothing more to see.
 All views are render-only: the emulation is identical in every view.
 
 Options: `--stage W-S`, `--cheat CODE`, `--mod NAME`, `--mods-dir DIR`, `--no-mods`, `--dump DIR`, `--dump-audio`, `--launcher`, `--fullscreen`, `--dmg` (plain Game Boy, no SGB border/colours), `--scale N`, `--view MODE` (`wide` is experimental), `--swap-ab`,

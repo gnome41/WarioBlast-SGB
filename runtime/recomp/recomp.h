@@ -59,6 +59,16 @@ typedef struct {
 
 extern const GameAudioNotes game_audio;
 
+/* widescreen view: while the window sits at (active_wx, active_wy) a match
+ * is on screen, and the background is an arena of arena_w x arena_h
+ * pixels drawn through the 256x256 tilemap with wrap-around (0 = unused) */
+typedef struct {
+    uint8_t active_wx, active_wy;
+    uint16_t arena_w, arena_h;
+} GameWideNotes;
+
+extern const GameWideNotes game_wide;
+
 /* ---- results ---- */
 
 typedef struct {

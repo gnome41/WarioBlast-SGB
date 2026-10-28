@@ -44,3 +44,16 @@ pause_flag = 0xD95E         # 1 while the game is paused
 pause_mask = 0x01
 music_stop = 0x00
 ack_mask = 0x80             # the driver sets bit 7 once it has taken a request
+
+# Widescreen view.  A match is on screen while the window (the status bar)
+# sits at WY=136, WX=7; menus and intros never put it there.  The arena is
+# 17 x 17 cells of 16 px (grid at DE00, 16 bytes a row: the right and
+# bottom walls are the left and top walls of the next row / the grid's
+# first row), so 272 px square, and the tilemap holds all of it: the
+# right and bottom walls wrap onto the left and top ones.  Nothing is
+# streamed, so every column of it can be shown.
+[wide]
+active_wx = 7
+active_wy = 0x88
+arena_width = 272
+arena_height = 272
